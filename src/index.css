@@ -1,6 +1,12 @@
-/* --- Base reset --- */
 :root {
   color-scheme: light;
+  --bg: #f6f7fb;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: rgba(17, 24, 39, 0.65);
+  --border: rgba(17, 24, 39, 0.10);
+  --shadow: 0 10px 30px rgba(17, 24, 39, 0.06);
+  --radius: 18px;
 }
 
 html, body {
@@ -8,17 +14,17 @@ html, body {
   margin: 0;
   padding: 0;
   -webkit-text-size-adjust: 100%;
+  background: var(--bg);
+  color: var(--text);
 }
 
 body {
   font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-  background: #ffffff;
-  color: #111;
   overscroll-behavior-y: none;
   -webkit-overflow-scrolling: touch;
 }
 
-/* --- iOS / mobile tap + selection improvements --- */
+/* iOS tap & selection improvements */
 button, a {
   touch-action: manipulation;
   -webkit-tap-highlight-color: transparent;
@@ -29,7 +35,6 @@ button, b, h1, h2, h3, h4, p, span, div {
   user-select: none;
 }
 
-/* Allow selection in code blocks if you ever add them */
 code, pre {
   -webkit-user-select: text;
   user-select: text;
@@ -45,7 +50,7 @@ button {
   font: inherit;
 }
 
-/* --- Layout helpers --- */
+/* Safe area padding */
 .safe-area {
   padding-left: env(safe-area-inset-left);
   padding-right: env(safe-area-inset-right);
@@ -53,74 +58,145 @@ button {
 }
 
 .container {
-  max-width: 820px;
+  max-width: 860px;
   margin: 0 auto;
   padding: 16px;
 }
 
-/* --- Header --- */
-.header {
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 14px;
+  margin: 12px 0;
+}
+
+.title {
+  margin: 0 0 8px 0;
+  font-size: 18px;
+}
+
+.appname {
+  font-weight: 900;
+  font-size: 18px;
+}
+
+.subtle {
+  font-size: 13px;
+  color: var(--muted);
+  margin-top: 2px;
+}
+
+.muted { color: var(--muted); }
+.tiny { font-size: 12px; }
+
+.topbar {
   position: sticky;
   top: 0;
   z-index: 1000;
-  background: #fff;
-  padding-top: 8px;
-  padding-bottom: 8px;
-  transform: translateZ(0); /* helps iOS repainting */
-  border-bottom: 1px solid #eee;
+  transform: translateZ(0); /* iOS repaint help */
+  padding: 10px 0 8px 0;
+  background: linear-gradient(to bottom, var(--bg), rgba(246,247,251,0.86));
+  backdrop-filter: blur(8px);
 }
 
-.header-title {
-  margin: 0;
-  font-size: 20px;
-  line-height: 1.2;
-}
-
-.header-actions {
+.topbar-left, .topbar-right {
   display: flex;
-  gap: 10px;
-  align-items: center;
-  flex-wrap: wrap;
-  margin-top: 10px;
+  flex-direction: column;
 }
 
-/* --- Buttons --- */
+.topbar {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: #fff;
+  font-size: 14px;
+}
+
+/* Buttons */
 .btn {
   padding: 10px 12px;
   border-radius: 12px;
-  background: #f3f4f6;
-  border: 1px solid #e5e7eb;
-  font-size: 16px; /* important for iOS (avoid zoom) */
+  background: #fff;
+  border: 1px solid var(--border);
+  font-size: 16px; /* important on iOS (avoid zoom) */
   line-height: 1;
+  box-shadow: 0 6px 14px rgba(17, 24, 39, 0.04);
+}
+
+.btn:disabled {
+  opacity: 0.5;
 }
 
 .btn-primary {
   background: #111827;
   border-color: #111827;
-  color: #fff;
-  font-weight: 700;
-}
-
-.badge-score {
+  color: white;
   font-weight: 800;
-  font-size: 16px;
 }
 
-/* --- Quiz --- */
-.question {
-  margin: 18px 0;
+/* Progress bar */
+.progress-wrap {
+  margin-top: 4px;
+}
+.progress-track {
+  height: 10px;
+  background: rgba(17, 24, 39, 0.10);
+  border-radius: 999px;
+  overflow: hidden;
+  border: 1px solid rgba(17, 24, 39, 0.06);
+}
+.progress-fill {
+  height: 100%;
+  background: #111827;
+  border-radius: 999px;
 }
 
-.question-title {
-  margin: 0 0 8px 0;
-  font-size: 18px;
-  line-height: 1.25;
+/* Settings */
+.settings-row {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.toggle {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+}
+
+.toggle input {
+  width: 18px;
+  height: 18px;
+}
+
+/* Quiz */
+.quiz {
+  padding: 16px;
 }
 
 .question-meta {
-  font-size: 13px;
-  opacity: 0.75;
-  margin-bottom: 10px;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+
+.question-title {
+  margin: 0 0 14px 0;
+  font-size: 18px;
+  line-height: 1.25;
 }
 
 .options {
@@ -128,45 +204,128 @@ button {
   gap: 10px;
 }
 
-.option-btn {
+.option {
   text-align: left;
   padding: 12px;
-  border: 1px solid #ddd;
-  border-radius: 12px;
+  border-radius: 14px;
+  border: 1px solid rgba(17, 24, 39, 0.14);
   background: #fff;
-  font-size: 16px;     /* important for iOS (avoid zoom) */
+  font-size: 16px;  /* iOS zoom prevention */
   line-height: 1.35;
 }
 
-.option-btn.selected {
-  background: #f2f2f2;
+.option.selected {
+  background: rgba(17, 24, 39, 0.04);
+  border-color: rgba(17, 24, 39, 0.20);
+}
+
+.option.opt-correct {
+  border-color: rgba(16, 185, 129, 0.55);
+  background: rgba(16, 185, 129, 0.08);
+}
+
+.option.opt-wrong {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.08);
 }
 
 .option-row {
   display: flex;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.optkey {
+  font-weight: 900;
 }
 
 .option-badge {
   white-space: nowrap;
-  opacity: 0.85;
+  opacity: 0.9;
+  font-size: 13px;
 }
 
-.result {
-  margin-top: 10px;
+/* Navigation row */
+.nav {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  gap: 10px;
+  align-items: center;
+  margin-top: 14px;
+}
+
+.nav-center {
+  text-align: center;
+  font-size: 13px;
+}
+
+/* Callouts */
+.callout {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
   font-weight: 800;
 }
 
-.hr {
-  margin-top: 16px;
-  border: none;
-  border-top: 1px solid #eee;
+.callout.ok {
+  border-color: rgba(16, 185, 129, 0.55);
+  background: rgba(16, 185, 129, 0.08);
 }
 
-/* Small screens tweaks */
+.callout.bad {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.08);
+}
+
+/* Review */
+.review-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.review-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid var(--border);
+  background: #fff;
+  text-align: left;
+}
+
+.review-item.ok {
+  border-color: rgba(16, 185, 129, 0.55);
+  background: rgba(16, 185, 129, 0.06);
+}
+.review-item.bad {
+  border-color: rgba(239, 68, 68, 0.55);
+  background: rgba(239, 68, 68, 0.06);
+}
+
+.review-q {
+  font-weight: 800;
+  margin-bottom: 4px;
+}
+
+.review-right {
+  font-size: 18px;
+}
+
+/* Footer */
+.footer {
+  margin: 16px 0 24px 0;
+  text-align: center;
+}
+
+/* Small screens */
 @media (max-width: 420px) {
   .container { padding: 12px; }
-  .header-title { font-size: 18px; }
   .question-title { font-size: 17px; }
+  .topbar { align-items: flex-start; }
+  .topbar-right { width: 100%; flex-direction: row; gap: 8px; justify-content: flex-end; }
 }
