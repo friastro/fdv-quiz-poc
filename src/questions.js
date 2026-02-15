@@ -31,6 +31,7 @@ export const QUESTIONS = [
 
   {
     id: "2.3",
+    chapterNumber: 2,
     chapter: "R300.2",
     source: "FDV: ►300.2 / 1.2.2",
     question: "Was bedeutet das Signalbild 'Warnung' beim Vorsignal?",
@@ -46,6 +47,7 @@ export const QUESTIONS = [
   
   {
     id: "2.4",
+    chapterNumber: 2,
     chapter: "R300.2",
     source: "FDV: ►300.2 / 1.3.1",
     question: "Wann darf ein Halt zeigendes Hauptsignal überfahren werden?",
@@ -61,6 +63,7 @@ export const QUESTIONS = [
   
   {
     id: "2.5",
+    chapterNumber: 2,
     chapter: "R300.2",
     source: "FDV: ►300.2 / 2.1.3",
     question: "Welche Geschwindigkeit gilt bei Fahrt auf Sicht?",
