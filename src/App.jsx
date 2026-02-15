@@ -80,22 +80,25 @@ function calcQuestionScore({ totalOptions, selectedArr, correctArr }) {
   const selected = new Set(selectedArr || []);
   const correct = new Set(correctArr || []);
 
-  let wrongSelected = 0;
+  // wrongCount = number of options where selection differs from truth
+  // = |selected Δ correct|
+  let wrongCount = 0;
+
+  // 1) Selected but not correct => wrong
   for (const a of selected) {
-    if (!correct.has(a)) wrongSelected += 1;
+    if (!correct.has(a)) wrongCount += 1;
   }
 
-  let missingCorrect = 0;
+  // 2) Correct but not selected => wrong
   for (const c of correct) {
-    if (!selected.has(c)) missingCorrect += 1;
+    if (!selected.has(c)) wrongCount += 1;
   }
 
-  const wrongTotal = wrongSelected + missingCorrect;
+  // Rule: if wrong answers >= half of all answers -> 0 points
+  if (wrongCount >= totalOptions / 2) return 0;
 
-  // hard floor: too many wrongs (including missed correct answers)
-  if (wrongTotal >= totalOptions / 2) return 0;
-
-  const points = totalOptions - wrongTotal;
+  // Otherwise: max - wrong
+  const points = totalOptions - wrongCount;
   return Math.max(0, Math.min(totalOptions, points));
 }
 
