@@ -16,12 +16,6 @@ function normalize(arr) {
   return [...new Set((arr || []).map((x) => String(x).toUpperCase()))].sort();
 }
 
-function same(a, b) {
-  const na = normalize(a);
-  const nb = normalize(b);
-  return na.length === nb.length && na.every((v, i) => v === nb[i]);
-}
-
 function getChapterNumber(q) {
   const id = String(q?.id ?? "").trim();
   const m = id.match(/^(\d+)\./);
@@ -71,35 +65,38 @@ function buildRelabeledOptions(question, shuffleOptions) {
 }
 
 /**
- * NEW scoring rules (your corrected version):
- * - max points = totalOptions
- * - -1 point for EACH wrong selected answer
- * - if wrongSelected >= totalOptions/2 => 0 points
+ * New judging model:
+ * - user marks each option as "C" (correct) or "W" (wrong) or "" (undecided)
+ * - truth is: option is correct iff it exists in correctArr
+ *
+ * wrongCount = number of options where judgement != truth
+ * - if undecided => counted as wrong
+ *
+ * points = totalOptions - wrongCount
+ * if wrongCount >= totalOptions/2 => 0
  */
-function calcQuestionScore({ totalOptions, selectedArr, correctArr }) {
-  const selected = new Set(selectedArr || []);
+function calcQuestionScoreJudgement({ optionKeys, judgementMap, correctArr }) {
   const correct = new Set(correctArr || []);
-
-  // wrongCount = number of options where selection differs from truth
-  // = |selected Δ correct|
   let wrongCount = 0;
 
-  // 1) Selected but not correct => wrong
-  for (const a of selected) {
-    if (!correct.has(a)) wrongCount += 1;
+  for (const k of optionKeys) {
+    const truthIsCorrect = correct.has(k);
+    const j = judgementMap?.[k] || ""; // "C" | "W" | ""
+
+    if (j === "") {
+      wrongCount += 1; // undecided counts as wrong
+      continue;
+    }
+
+    const judgedCorrect = j === "C";
+    if (judgedCorrect !== truthIsCorrect) wrongCount += 1;
   }
 
-  // 2) Correct but not selected => wrong
-  for (const c of correct) {
-    if (!selected.has(c)) wrongCount += 1;
-  }
+  const totalOptions = optionKeys.length;
+  if (wrongCount >= totalOptions / 2) return { points: 0, wrongCount };
 
-  // Rule: if wrong answers >= half of all answers -> 0 points
-  if (wrongCount >= totalOptions / 2) return 0;
-
-  // Otherwise: max - wrong
-  const points = totalOptions - wrongCount;
-  return Math.max(0, Math.min(totalOptions, points));
+  const points = Math.max(0, Math.min(totalOptions, totalOptions - wrongCount));
+  return { points, wrongCount };
 }
 
 function Img({ src, alt, variant }) {
@@ -143,7 +140,17 @@ export default function App() {
 
   // Quiz state
   const [index, setIndex] = useState(0);
+
+  /**
+   * NEW: answers[qid] is an object:
+   * {
+   *   A: "C"|"W"|"",
+   *   B: "C"|"W"|"",
+   *   ...
+   * }
+   */
   const [answers, setAnswers] = useState({});
+
   const [submitted, setSubmitted] = useState(false);
 
   // Detect available chapters from IDs
@@ -166,7 +173,7 @@ export default function App() {
     return shuffleQuestions ? shuffleArray(base) : base;
   }, [quizStarted, filtered, shuffleQuestions]);
 
-  // Per-question option order + remapped correct answers (option shuffle + relabel)
+  // Per-question option order + remapped correct answers
   const optionPack = useMemo(() => {
     const map = {};
     for (const q of quiz) map[q.id] = buildRelabeledOptions(q, shuffleOptions);
@@ -175,18 +182,25 @@ export default function App() {
 
   const current = quiz[index];
 
+  // Consider a question "answered" when ALL options are marked (no "")
   const progress = useMemo(() => {
     const total = quiz.length || 0;
-    const answered = quiz.reduce(
-      (acc, q) => acc + ((answers[q.id] || []).length > 0 ? 1 : 0),
-      0
-    );
+    const answered = quiz.reduce((acc, q) => {
+      const pack = optionPack[q.id];
+      if (!pack) return acc;
+
+      const keys = pack.options.map((o) => o.key);
+      const m = answers[q.id] || {};
+      const allDecided = keys.every((k) => m[k] === "C" || m[k] === "W");
+      return acc + (allDecided ? 1 : 0);
+    }, 0);
+
     const step = total ? index + 1 : 0;
     const pct = total ? (step / total) * 100 : 0;
     return { total, answered, step, pct };
-  }, [quiz, answers, index]);
+  }, [quiz, optionPack, answers, index]);
 
-  // Points-based scoring
+  // Total score after submit
   const score = useMemo(() => {
     if (!submitted) return null;
 
@@ -197,18 +211,15 @@ export default function App() {
       const pack = optionPack[q.id];
       if (!pack) continue;
 
-      const totalOptions = pack.options.length;
-      const correctArr = pack.correct;
-      const selectedArr = answers[q.id] || [];
-
-      const qPoints = calcQuestionScore({
-        totalOptions,
-        selectedArr,
-        correctArr
+      const keys = pack.options.map((o) => o.key);
+      const { points: qPoints } = calcQuestionScoreJudgement({
+        optionKeys: keys,
+        judgementMap: answers[q.id] || {},
+        correctArr: pack.correct
       });
 
       points += qPoints;
-      maxPoints += totalOptions;
+      maxPoints += keys.length;
     }
 
     return {
@@ -216,15 +227,14 @@ export default function App() {
       maxPoints,
       pct: maxPoints ? (points / maxPoints) * 100 : 0
     };
-  }, [submitted, answers, quiz, optionPack]);
+  }, [submitted, quiz, optionPack, answers]);
 
-  function toggleAnswer(qid, opt) {
+  function setJudgement(qid, optKey, value) {
     if (submitted) return;
     setAnswers((prev) => {
-      const curr = new Set(prev[qid] || []);
-      if (curr.has(opt)) curr.delete(opt);
-      else curr.add(opt);
-      return { ...prev, [qid]: Array.from(curr) };
+      const curr = { ...(prev[qid] || {}) };
+      curr[optKey] = value; // "C" | "W" | ""
+      return { ...prev, [qid]: curr };
     });
   }
 
@@ -272,7 +282,7 @@ export default function App() {
                   checked={practiceMode}
                   onChange={(e) => setPracticeMode(e.target.checked)}
                 />
-                <span>Practice mode (show solution immediately)</span>
+                <span>Practice mode (show feedback)</span>
               </label>
 
               <label className="toggle">
@@ -314,7 +324,6 @@ export default function App() {
                 className="btn btn-primary"
                 onClick={() => setQuizStarted(true)}
                 disabled={!selectedChapters.length}
-                title={!selectedChapters.length ? "Select at least one chapter" : "Start quiz"}
               >
                 Start quiz
               </button>
@@ -377,19 +386,21 @@ export default function App() {
   }
 
   const pack = optionPack[current.id];
-  const correctNow = pack?.correct ?? [];
-  const selected = new Set(answers[current.id] || []);
+  const keys = pack.options.map((o) => o.key);
+  const judgementMap = answers[current.id] || {};
+  const correctNow = new Set(pack.correct);
+
   const isFirst = index === 0;
   const isLast = index === quiz.length - 1;
 
-  const showPracticeFeedback = practiceMode && !submitted && (answers[current.id] || []).length > 0;
-  const currentIsCorrect = same(answers[current.id], correctNow);
-
-  const currentPoints = calcQuestionScore({
-    totalOptions: pack.options.length,
-    selectedArr: answers[current.id] || [],
-    correctArr: correctNow
+  const { points: currentPoints, wrongCount } = calcQuestionScoreJudgement({
+    optionKeys: keys,
+    judgementMap,
+    correctArr: pack.correct
   });
+
+  // Practice feedback: show per-option truth and current wrongCount
+  const showPracticeFeedback = practiceMode && !submitted;
 
   return (
     <div className="safe-area">
@@ -398,8 +409,8 @@ export default function App() {
           <div className="topbar-left">
             <div className="appname">FDV Quiz PoC</div>
             <div className="subtle">
-              Question <b>{progress.step}</b> / {progress.total} • Answered <b>{progress.answered}</b> • This question:{" "}
-              <b>{currentPoints}</b>/{pack.options.length}
+              Question <b>{progress.step}</b> / {progress.total} • Fully decided <b>{progress.answered}</b> • This
+              question: <b>{currentPoints}</b>/{keys.length} (wrong: {wrongCount})
             </div>
           </div>
 
@@ -458,9 +469,6 @@ export default function App() {
               <span>Show comments</span>
             </label>
           </div>
-          <div className="tiny muted">
-            Tip: To re-randomize question order, go back to <b>Chapters</b> and Start again.
-          </div>
         </section>
 
         <section className="card quiz">
@@ -495,61 +503,85 @@ export default function App() {
 
           <div className="options" style={{ marginTop: 12 }}>
             {pack.options.map(({ key, text, image }) => {
-              const isSel = selected.has(key);
-              const isCorr = correctNow.includes(key);
+              const j = judgementMap[key] || ""; // "C" | "W" | ""
+              const truthIsCorrect = correctNow.has(key);
 
+              // Visual feedback
               let badge = "";
               let stateClass = "";
 
-              if (submitted) {
-                if (isCorr && isSel) {
-                  badge = "✅ correct";
-                  stateClass = "opt-correct";
-                } else if (isCorr && !isSel) {
-                  badge = "🟩 correct";
-                  stateClass = "opt-correct";
-                } else if (!isCorr && isSel) {
-                  badge = "❌ selected";
-                  stateClass = "opt-wrong";
+              if (submitted || showPracticeFeedback) {
+                // show whether the user's judgement is correct
+                if (j === "") {
+                  badge = "⚪ undecided";
+                  stateClass = "";
+                } else {
+                  const judgedCorrect = j === "C";
+                  const ok = judgedCorrect === truthIsCorrect;
+                  badge = ok ? "✅" : "❌";
+                  stateClass = ok ? "opt-correct" : "opt-wrong";
                 }
-              } else if (practiceMode && isSel) {
-                badge = isCorr ? "✅" : "❌";
-                stateClass = isCorr ? "opt-correct" : "opt-wrong";
               }
 
               return (
-                <button
+                <div
                   key={key}
-                  className={`option ${isSel ? "selected" : ""} ${stateClass}`}
-                  onClick={() => toggleAnswer(current.id, key)}
-                  disabled={submitted}
+                  className={`option ${stateClass}`}
+                  style={{ display: "block", padding: 12 }}
                 >
-                  <div className="option-row">
+                  <div className="option-row" style={{ alignItems: "flex-start" }}>
                     <div className="option-text" style={{ width: "100%" }}>
                       <div style={{ marginBottom: image ? 10 : 0 }}>
                         <span className="optkey">{key}.</span> {text}
                       </div>
                       <Img src={image} alt={`Option ${key}`} variant="option" />
+
+                      {/* Judgement controls */}
+                      <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                        <button
+                          className={`btn ${j === "C" ? "btn-primary" : ""}`}
+                          onClick={() => setJudgement(current.id, key, "C")}
+                          disabled={submitted}
+                          type="button"
+                        >
+                          ✅ Correct
+                        </button>
+
+                        <button
+                          className={`btn ${j === "W" ? "btn-primary" : ""}`}
+                          onClick={() => setJudgement(current.id, key, "W")}
+                          disabled={submitted}
+                          type="button"
+                        >
+                          ❌ Wrong
+                        </button>
+
+                        <button
+                          className="btn"
+                          onClick={() => setJudgement(current.id, key, "")}
+                          disabled={submitted}
+                          type="button"
+                        >
+                          Reset
+                        </button>
+                      </div>
                     </div>
+
                     <div className="option-badge">{badge}</div>
                   </div>
-                </button>
+                </div>
               );
             })}
           </div>
-
-          {showPracticeFeedback && (
-            <div className={`callout ${currentIsCorrect ? "ok" : "bad"}`}>
-              {currentIsCorrect ? "✅ Correct" : `❌ Not quite — correct: ${normalize(correctNow).join(", ")}`}
-            </div>
-          )}
 
           <div className="nav">
             <button className="btn" onClick={goPrev} disabled={isFirst}>
               ← Back
             </button>
 
-            <div className="nav-center muted">{selected.size > 0 ? "Answered" : "Not answered yet"}</div>
+            <div className="nav-center muted">
+              Mark each option as Correct or Wrong.
+            </div>
 
             {!isLast ? (
               <button className="btn btn-primary" onClick={goNext}>
@@ -571,22 +603,18 @@ export default function App() {
             <div className="review-list">
               {quiz.map((q, i) => {
                 const packQ = optionPack[q.id];
-                const totalOptions = packQ?.options?.length ?? 0;
-                const corr = normalize(packQ?.correct ?? []);
-                const sel = normalize(answers[q.id] || []);
+                const keysQ = packQ.options.map((o) => o.key);
 
-                const qPoints = calcQuestionScore({
-                  totalOptions,
-                  selectedArr: answers[q.id] || [],
-                  correctArr: packQ?.correct ?? []
+                const res = calcQuestionScoreJudgement({
+                  optionKeys: keysQ,
+                  judgementMap: answers[q.id] || {},
+                  correctArr: packQ.correct
                 });
-
-                const ok = same(sel, corr);
 
                 return (
                   <button
                     key={q.id}
-                    className={`review-item ${ok ? "ok" : "bad"}`}
+                    className={`review-item ${res.points === keysQ.length ? "ok" : "bad"}`}
                     onClick={() => {
                       setIndex(i);
                       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -597,11 +625,10 @@ export default function App() {
                         {i + 1}) {q.question}
                       </div>
                       <div className="tiny muted">
-                        Points: <b>{qPoints}</b>/{totalOptions} • Your: <b>{sel.length ? sel.join(", ") : "—"}</b> •
-                        Correct: <b>{corr.join(", ")}</b>
+                        Points: <b>{res.points}</b>/{keysQ.length} • Wrong: <b>{res.wrongCount}</b>
                       </div>
                     </div>
-                    <div className="review-right">{ok ? "✅" : "❌"}</div>
+                    <div className="review-right">{res.points === keysQ.length ? "✅" : "❌"}</div>
                   </button>
                 );
               })}
