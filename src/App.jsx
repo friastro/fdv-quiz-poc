@@ -1,11 +1,11 @@
 import { useMemo, useState } from "react";
 import { QUESTIONS } from "./questions";
 
-/* ----------------- helpers ----------------- */
+/* ---------------- helpers ---------------- */
 
 function shuffleArray(arr) {
   const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
+  for (let i = a.length - 1; i > 0; i -= 1) {
     const j = Math.floor(Math.random() * (i + 1));
     [a[i], a[j]] = [a[j], a[i]];
   }
@@ -23,112 +23,113 @@ function same(a, b) {
 }
 
 function getChapterNumber(q) {
-  const id = String(q?.id ?? "");
+  // ids like "1.16" => chapter 1
+  const id = String(q?.id ?? "").trim();
   const m = id.match(/^(\d+)\./);
   if (m) return Number(m[1]);
-  if (typeof q.chapterNumber === "number") return q.chapterNumber;
+  if (typeof q?.chapterNumber === "number") return q.chapterNumber;
   return null;
 }
 
-/* --- shuffle + relabel answers A–D properly --- */
-function buildOptionList(question, shuffleOptions) {
-  const entries = Object.entries(question.options).map(([key, text]) => ({
-    originalKey: key,
+/**
+ * Shuffle options + RELABEL them A,B,C... according to the new order,
+ * and remap the correct answers accordingly.
+ *
+ * Returns:
+ * {
+ *   options: [{key:"A", text:"..."}, ...],
+ *   correct: ["B","D",...]
+ * }
+ */
+function buildRelabeledOptions(question, shuffleOptions) {
+  const letters = ["A", "B", "C", "D", "E", "F", "G"];
+  const entries = Object.entries(question.options).map(([origKey, text]) => ({
+    origKey,
     text
   }));
 
-  const shuffled = shuffleOptions ? shuffleArray(entries) : entries;
+  const ordered = shuffleOptions ? shuffleArray(entries) : entries;
 
-  const letters = ["A", "B", "C", "D", "E", "F", "G"];
-
-  const remapped = shuffled.map((item, index) => ({
-    key: letters[index],
-    text: item.text,
-    originalKey: item.originalKey
+  const relabeled = ordered.map((it, idx) => ({
+    key: letters[idx],
+    text: it.text,
+    origKey: it.origKey
   }));
 
-  const keyMap = {};
-  remapped.forEach((item) => {
-    keyMap[item.originalKey] = item.key;
-  });
+  const mapOrigToNew = {};
+  for (const it of relabeled) mapOrigToNew[it.origKey] = it.key;
 
-  const newCorrect = question.correct.map((c) => keyMap[c]);
+  const newCorrect = (question.correct || [])
+    .map((c) => mapOrigToNew[String(c).toUpperCase()])
+    .filter(Boolean);
 
-  return {
-    options: remapped,
-    correct: newCorrect
-  };
+  return { options: relabeled, correct: newCorrect };
 }
 
-/* ----------------- APP ----------------- */
+/* ---------------- App ---------------- */
 
 export default function App() {
-  const [selectedChapters, setSelectedChapters] = useState([]);
+  // Chapter selection state
   const [quizStarted, setQuizStarted] = useState(false);
+  const [selectedChapters, setSelectedChapters] = useState([]);
 
+  // Features
   const [practiceMode, setPracticeMode] = useState(false);
   const [shuffleQuestions, setShuffleQuestions] = useState(true);
   const [shuffleOptions, setShuffleOptions] = useState(true);
 
+  // Quiz runtime
   const [index, setIndex] = useState(0);
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
+  // Detect chapters
   const chapters = useMemo(() => {
-    const nums = QUESTIONS.map(getChapterNumber).filter((x) =>
-      Number.isFinite(x)
-    );
+    const nums = QUESTIONS.map(getChapterNumber).filter((x) => Number.isFinite(x));
     return [...new Set(nums)].sort((a, b) => a - b);
   }, []);
 
-  const filteredQuestions = useMemo(() => {
+  // Filter questions by chosen chapters
+  const filtered = useMemo(() => {
     if (!selectedChapters.length) return [];
-    const set = new Set(selectedChapters);
-    return QUESTIONS.filter((q) => set.has(getChapterNumber(q)));
+    const s = new Set(selectedChapters);
+    return QUESTIONS.filter((q) => s.has(getChapterNumber(q)));
   }, [selectedChapters]);
 
+  // Build quiz list when started (question shuffle)
   const quiz = useMemo(() => {
     if (!quizStarted) return [];
-    const base = filteredQuestions.slice();
+    const base = filtered.slice();
     return shuffleQuestions ? shuffleArray(base) : base;
-  }, [quizStarted, filteredQuestions, shuffleQuestions]);
+  }, [quizStarted, filtered, shuffleQuestions]);
 
-  const optionOrders = useMemo(() => {
+  // Build per-question option order + remapped correct answers (option shuffle + relabel)
+  // IMPORTANT: this memo ensures options don't reshuffle on every render.
+  const optionPack = useMemo(() => {
     const map = {};
-    for (const q of quiz) {
-      map[q.id] = buildOptionList(q, shuffleOptions);
-    }
+    for (const q of quiz) map[q.id] = buildRelabeledOptions(q, shuffleOptions);
     return map;
   }, [quiz, shuffleOptions]);
 
   const current = quiz[index];
 
   const progress = useMemo(() => {
-    const total = quiz.length;
-    const answered = quiz.reduce(
-      (acc, q) => acc + ((answers[q.id] || []).length > 0 ? 1 : 0),
-      0
-    );
-    return {
-      total,
-      answered,
-      step: index + 1,
-      pct: total ? ((index + 1) / total) * 100 : 0
-    };
+    const total = quiz.length || 0;
+    const answered = quiz.reduce((acc, q) => acc + ((answers[q.id] || []).length > 0 ? 1 : 0), 0);
+    const step = total ? index + 1 : 0;
+    const pct = total ? (step / total) * 100 : 0;
+    return { total, answered, step, pct };
   }, [quiz, answers, index]);
 
   const score = useMemo(() => {
     if (!submitted) return null;
     let ok = 0;
     for (const q of quiz) {
-      if (same(answers[q.id], optionOrders[q.id].correct)) ok++;
+      const corr = optionPack[q.id]?.correct ?? [];
+      if (same(answers[q.id], corr)) ok += 1;
     }
-    return {
-      ok,
-      total: quiz.length,
-      pct: quiz.length ? (ok / quiz.length) * 100 : 0
-    };
-  }, [submitted, answers, quiz, optionOrders]);
+    return { ok, total: quiz.length, pct: quiz.length ? (ok / quiz.length) * 100 : 0 };
+  }, [submitted, answers, quiz, optionPack]);
 
   function toggleAnswer(qid, opt) {
     if (submitted) return;
@@ -140,169 +141,357 @@ export default function App() {
     });
   }
 
-  function restartToChapters() {
+  function goPrev() {
+    setIndex((i) => Math.max(0, i - 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function goNext() {
+    setIndex((i) => Math.min(quiz.length - 1, i + 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function backToChapters(keepSelection = true) {
     setQuizStarted(false);
     setSubmitted(false);
     setAnswers({});
     setIndex(0);
+    if (!keepSelection) setSelectedChapters([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  /* --------- CHAPTER SELECTION SCREEN --------- */
+  /* ---------------- Start screen ---------------- */
 
   if (!quizStarted) {
+    const allSelected = chapters.length > 0 && selectedChapters.length === chapters.length;
+
     return (
-      <div className="container">
-        <h2>Select Chapters</h2>
+      <div className="safe-area">
+        <div className="container">
+          <header className="topbar" style={{ position: "relative" }}>
+            <div className="topbar-left">
+              <div className="appname">FDV Quiz PoC</div>
+              <div className="subtle">Select chapters, then start.</div>
+            </div>
+          </header>
 
-        {chapters.map((ch) => (
-          <label key={ch} style={{ display: "block", margin: "8px 0" }}>
-            <input
-              type="checkbox"
-              checked={selectedChapters.includes(ch)}
-              onChange={(e) => {
-                if (e.target.checked)
-                  setSelectedChapters((prev) => [...prev, ch]);
-                else
-                  setSelectedChapters((prev) =>
-                    prev.filter((x) => x !== ch)
-                  );
-              }}
-            />
-            {" "}Chapter {ch}
-          </label>
-        ))}
+          <section className="card">
+            <h3 className="title">Chapter selection</h3>
 
-        <hr />
+            <div className="settings-row" style={{ marginTop: 10 }}>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={practiceMode}
+                  onChange={(e) => setPracticeMode(e.target.checked)}
+                />
+                <span>Practice mode (show solution immediately)</span>
+              </label>
 
-        <label>
-          <input
-            type="checkbox"
-            checked={practiceMode}
-            onChange={(e) => setPracticeMode(e.target.checked)}
-          />
-          {" "}Practice mode
-        </label>
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={shuffleQuestions}
+                  onChange={(e) => setShuffleQuestions(e.target.checked)}
+                />
+                <span>Shuffle questions</span>
+              </label>
 
-        <br />
+              <label className="toggle">
+                <input
+                  type="checkbox"
+                  checked={shuffleOptions}
+                  onChange={(e) => setShuffleOptions(e.target.checked)}
+                />
+                <span>Shuffle options (relabels A–D)</span>
+              </label>
+            </div>
 
-        <label>
-          <input
-            type="checkbox"
-            checked={shuffleQuestions}
-            onChange={(e) => setShuffleQuestions(e.target.checked)}
-          />
-          {" "}Shuffle questions
-        </label>
+            <div className="nav" style={{ gridTemplateColumns: "1fr 1fr 1fr" }}>
+              <button className="btn" onClick={() => setSelectedChapters(chapters)} disabled={allSelected}>
+                Select all
+              </button>
+              <button className="btn" onClick={() => setSelectedChapters([])} disabled={!selectedChapters.length}>
+                Clear
+              </button>
+              <button
+                className="btn btn-primary"
+                onClick={() => setQuizStarted(true)}
+                disabled={!selectedChapters.length}
+                title={!selectedChapters.length ? "Select at least one chapter" : "Start quiz"}
+              >
+                Start quiz
+              </button>
+            </div>
 
-        <br />
+            <div className="review-list" style={{ marginTop: 12 }}>
+              {chapters.map((ch) => {
+                const count = QUESTIONS.filter((q) => getChapterNumber(q) === ch).length;
+                const checked = selectedChapters.includes(ch);
 
-        <label>
-          <input
-            type="checkbox"
-            checked={shuffleOptions}
-            onChange={(e) => setShuffleOptions(e.target.checked)}
-          />
-          {" "}Shuffle options
-        </label>
+                return (
+                  <label key={ch} className="review-item" style={{ cursor: "pointer" }}>
+                    <div className="review-left">
+                      <div className="review-q">Chapter {ch}</div>
+                      <div className="tiny muted">{count} question(s)</div>
+                    </div>
+                    <div className="review-right">
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        onChange={(e) => {
+                          setSelectedChapters((prev) => {
+                            if (e.target.checked) return [...new Set([...prev, ch])].sort((a, b) => a - b);
+                            return prev.filter((x) => x !== ch);
+                          });
+                        }}
+                        style={{ width: 18, height: 18 }}
+                      />
+                    </div>
+                  </label>
+                );
+              })}
+            </div>
+          </section>
 
-        <br /><br />
-
-        <button
-          onClick={() => setQuizStarted(true)}
-          disabled={!selectedChapters.length}
-        >
-          Start Quiz
-        </button>
+          <footer className="footer tiny muted">Public PoC • Runs fully in-browser • No tracking</footer>
+        </div>
       </div>
     );
   }
 
-  /* --------- QUIZ --------- */
+  /* ---------------- Quiz screen ---------------- */
 
-  if (!current) return null;
+  if (!current) {
+    return (
+      <div className="safe-area">
+        <div className="container">
+          <section className="card">
+            <h3 className="title">No questions for selected chapter(s)</h3>
+            <div className="tiny muted" style={{ marginBottom: 12 }}>
+              Go back and pick different chapters.
+            </div>
+            <button className="btn btn-primary" onClick={() => backToChapters(false)}>
+              Back to chapters
+            </button>
+          </section>
+        </div>
+      </div>
+    );
+  }
 
-  const optionData = optionOrders[current.id];
-  const correctNow = optionData.correct;
+  const pack = optionPack[current.id];
+  const correctNow = pack?.correct ?? [];
   const selected = new Set(answers[current.id] || []);
+  const isFirst = index === 0;
+  const isLast = index === quiz.length - 1;
+
+  const showPracticeFeedback = practiceMode && !submitted && (answers[current.id] || []).length > 0;
+  const currentIsCorrect = same(answers[current.id], correctNow);
 
   return (
-    <div className="container">
-      <h3>
-        Question {index + 1} / {quiz.length}
-      </h3>
+    <div className="safe-area">
+      <div className="container">
+        <header className="topbar">
+          <div className="topbar-left">
+            <div className="appname">FDV Quiz PoC</div>
+            <div className="subtle">
+              Question <b>{progress.step}</b> / {progress.total} • Answered <b>{progress.answered}</b>
+            </div>
+          </div>
 
-      <div
-        style={{
-          height: "10px",
-          background: "#ddd",
-          borderRadius: "10px",
-          marginBottom: "12px"
-        }}
-      >
-        <div
-          style={{
-            height: "100%",
-            width: `${progress.pct}%`,
-            background: "#111",
-            borderRadius: "10px"
-          }}
-        />
+          <div className="topbar-right" style={{ gap: 8, flexDirection: "row" }}>
+            <button className="btn" onClick={() => backToChapters(true)}>
+              Chapters
+            </button>
+
+            {!submitted ? (
+              <button className="btn btn-primary" onClick={() => setSubmitted(true)} disabled={progress.answered === 0}>
+                Submit
+              </button>
+            ) : (
+              <div className="pill">
+                Score: <b>{score.ok}</b>/{score.total} ({score.pct.toFixed(1)}%)
+              </div>
+            )}
+          </div>
+        </header>
+
+        {/* Progress bar */}
+        <div className="progress-wrap" aria-label="Progress">
+          <div className="progress-track">
+            <div className="progress-fill" style={{ width: `${progress.pct}%` }} />
+          </div>
+        </div>
+
+        {/* Settings (kept) */}
+        <section className="card settings">
+          <div className="settings-row">
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={practiceMode}
+                onChange={(e) => setPracticeMode(e.target.checked)}
+                disabled={submitted}
+              />
+              <span>Practice mode</span>
+            </label>
+
+            <label className="toggle">
+              <input type="checkbox" checked={shuffleQuestions} disabled />
+              <span>Shuffle questions (locked after start)</span>
+            </label>
+
+            <label className="toggle">
+              <input
+                type="checkbox"
+                checked={shuffleOptions}
+                onChange={(e) => setShuffleOptions(e.target.checked)}
+                disabled={submitted}
+              />
+              <span>Shuffle options (relabels A–D)</span>
+            </label>
+          </div>
+          <div className="tiny muted">
+            Tip: To re-randomize question order, go back to <b>Chapters</b> and Start again.
+          </div>
+        </section>
+
+        {/* Question */}
+        <section className="card quiz">
+          <div className="question-meta">
+            {(current.chapter || current.source) ? (
+              <span className="muted">{[current.chapter, current.source].filter(Boolean).join(" • ")}</span>
+            ) : (
+              <span className="muted"> </span>
+            )}
+          </div>
+
+          <h2 className="question-title">
+            {index + 1}) {current.question}
+          </h2>
+
+          <div className="options">
+            {pack.options.map(({ key, text }) => {
+              const isSel = selected.has(key);
+              const isCorr = correctNow.includes(key);
+
+              let badge = "";
+              let stateClass = "";
+
+              if (submitted) {
+                if (isCorr && isSel) {
+                  badge = "✅ correct";
+                  stateClass = "opt-correct";
+                } else if (isCorr && !isSel) {
+                  badge = "🟩 correct";
+                  stateClass = "opt-correct";
+                } else if (!isCorr && isSel) {
+                  badge = "❌ selected";
+                  stateClass = "opt-wrong";
+                }
+              } else if (practiceMode && isSel) {
+                if (isCorr) {
+                  badge = "✅";
+                  stateClass = "opt-correct";
+                } else {
+                  badge = "❌";
+                  stateClass = "opt-wrong";
+                }
+              }
+
+              return (
+                <button
+                  key={key}
+                  className={`option ${isSel ? "selected" : ""} ${stateClass}`}
+                  onClick={() => toggleAnswer(current.id, key)}
+                  disabled={submitted}
+                >
+                  <div className="option-row">
+                    <div className="option-text">
+                      <span className="optkey">{key}.</span> {text}
+                    </div>
+                    <div className="option-badge">{badge}</div>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          {showPracticeFeedback && (
+            <div className={`callout ${currentIsCorrect ? "ok" : "bad"}`}>
+              {currentIsCorrect ? "✅ Correct" : `❌ Not quite — correct: ${normalize(correctNow).join(", ")}`}
+            </div>
+          )}
+
+          <div className="nav">
+            <button className="btn" onClick={goPrev} disabled={isFirst}>
+              ← Back
+            </button>
+
+            <div className="nav-center muted">{selected.size > 0 ? "Answered" : "Not answered yet"}</div>
+
+            {!isLast ? (
+              <button className="btn btn-primary" onClick={goNext}>
+                Next →
+              </button>
+            ) : (
+              <button className="btn btn-primary" onClick={() => setSubmitted(true)}>
+                Finish & Submit
+              </button>
+            )}
+          </div>
+        </section>
+
+        {/* Review */}
+        {submitted && (
+          <section className="card review">
+            <h3 className="title">Review</h3>
+            <div className="tiny muted">Tap an item to jump to that question.</div>
+
+            <div className="review-list">
+              {quiz.map((q, i) => {
+                const packQ = optionPack[q.id];
+                const corr = normalize(packQ?.correct ?? []);
+                const sel = normalize(answers[q.id] || []);
+                const ok = same(sel, corr);
+
+                return (
+                  <button
+                    key={q.id}
+                    className={`review-item ${ok ? "ok" : "bad"}`}
+                    onClick={() => {
+                      setIndex(i);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    <div className="review-left">
+                      <div className="review-q">
+                        {i + 1}) {q.question}
+                      </div>
+                      <div className="tiny muted">
+                        Your: <b>{sel.length ? sel.join(", ") : "—"}</b> • Correct: <b>{corr.join(", ")}</b>
+                      </div>
+                    </div>
+                    <div className="review-right">{ok ? "✅" : "❌"}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button className="btn" onClick={() => backToChapters(true)}>
+                Back to chapters
+              </button>
+              <button className="btn btn-primary" onClick={() => backToChapters(false)}>
+                Change chapters
+              </button>
+            </div>
+          </section>
+        )}
+
+        <footer className="footer tiny muted">Public PoC • Runs fully in-browser • No tracking</footer>
       </div>
-
-      <h2>{current.question}</h2>
-
-      {optionData.options.map(({ key, text }) => {
-        const isSel = selected.has(key);
-        const isCorr = correctNow.includes(key);
-
-        let badge = "";
-        if (submitted) {
-          if (isCorr && isSel) badge = "✅";
-          else if (!isCorr && isSel) badge = "❌";
-        } else if (practiceMode && isSel) {
-          badge = isCorr ? "✅" : "❌";
-        }
-
-        return (
-          <button
-            key={key}
-            style={{
-              display: "block",
-              margin: "6px 0",
-              padding: "8px",
-              background: isSel ? "#eee" : "#fff"
-            }}
-            onClick={() => toggleAnswer(current.id, key)}
-            disabled={submitted}
-          >
-            <b>{key}.</b> {text} {badge}
-          </button>
-        );
-      })}
-
-      <br />
-
-      {index > 0 && (
-        <button onClick={() => setIndex(index - 1)}>Back</button>
-      )}
-
-      {index < quiz.length - 1 ? (
-        <button onClick={() => setIndex(index + 1)}>Next</button>
-      ) : (
-        <button onClick={() => setSubmitted(true)}>Submit</button>
-      )}
-
-      {submitted && (
-        <>
-          <h3>
-            Score: {score.ok}/{score.total} ({score.pct.toFixed(1)}%)
-          </h3>
-
-          <button onClick={restartToChapters}>
-            Back to Chapters
-          </button>
-        </>
-      )}
     </div>
   );
 }
