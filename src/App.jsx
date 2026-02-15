@@ -80,18 +80,22 @@ function calcQuestionScore({ totalOptions, selectedArr, correctArr }) {
   const selected = new Set(selectedArr || []);
   const correct = new Set(correctArr || []);
 
-  // ✅ NEW: unanswered question gives 0 points
-  if (selected.size === 0) return 0;
-
   let wrongSelected = 0;
   for (const a of selected) {
     if (!correct.has(a)) wrongSelected += 1;
   }
 
-  // hard floor
-  if (wrongSelected >= totalOptions / 2) return 0;
+  let missingCorrect = 0;
+  for (const c of correct) {
+    if (!selected.has(c)) missingCorrect += 1;
+  }
 
-  const points = totalOptions - wrongSelected;
+  const wrongTotal = wrongSelected + missingCorrect;
+
+  // hard floor: too many wrongs (including missed correct answers)
+  if (wrongTotal >= totalOptions / 2) return 0;
+
+  const points = totalOptions - wrongTotal;
   return Math.max(0, Math.min(totalOptions, points));
 }
 
