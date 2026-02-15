@@ -71,26 +71,22 @@ function buildRelabeledOptions(question, shuffleOptions) {
 }
 
 /**
- * Scoring rules:
- * - max points = totalOptions (e.g. 4 options -> 4 points)
- * - 1 wrong selected answer => max - 1 point (generalized: subtract wrongSelected)
- * - if correctSelected <= median(totalOptions/2) => 0 points
+ * NEW scoring rules (your corrected version):
+ * - max points = totalOptions
+ * - -1 point for EACH wrong selected answer
+ * - if wrongSelected >= totalOptions/2 => 0 points
  */
 function calcQuestionScore({ totalOptions, selectedArr, correctArr }) {
   const selected = new Set(selectedArr || []);
   const correct = new Set(correctArr || []);
 
-  let correctSelected = 0;
   let wrongSelected = 0;
-
   for (const a of selected) {
-    if (correct.has(a)) correctSelected += 1;
-    else wrongSelected += 1;
+    if (!correct.has(a)) wrongSelected += 1;
   }
 
-  const median = totalOptions / 2;
-
-  if (correctSelected <= median) return 0;
+  // hard floor
+  if (wrongSelected >= totalOptions / 2) return 0;
 
   const points = totalOptions - wrongSelected;
   return Math.max(0, Math.min(totalOptions, points));
@@ -161,7 +157,6 @@ export default function App() {
   }, [quizStarted, filtered, shuffleQuestions]);
 
   // Per-question option order + remapped correct answers (option shuffle + relabel)
-  // Memo ensures: no reshuffle on every render.
   const optionPack = useMemo(() => {
     const map = {};
     for (const q of quiz) map[q.id] = buildRelabeledOptions(q, shuffleOptions);
@@ -181,7 +176,7 @@ export default function App() {
     return { total, answered, step, pct };
   }, [quiz, answers, index]);
 
-  // NEW: points-based scoring
+  // Points-based scoring
   const score = useMemo(() => {
     if (!submitted) return null;
 
@@ -242,7 +237,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  /* ---------------- Start screen (chapter selection) ---------------- */
+  /* ---------------- Start screen ---------------- */
 
   if (!quizStarted) {
     const allSelected = chapters.length > 0 && selectedChapters.length === chapters.length;
@@ -380,7 +375,6 @@ export default function App() {
   const showPracticeFeedback = practiceMode && !submitted && (answers[current.id] || []).length > 0;
   const currentIsCorrect = same(answers[current.id], correctNow);
 
-  // Per-question points (shown in the question UI)
   const currentPoints = calcQuestionScore({
     totalOptions: pack.options.length,
     selectedArr: answers[current.id] || [],
@@ -394,8 +388,8 @@ export default function App() {
           <div className="topbar-left">
             <div className="appname">FDV Quiz PoC</div>
             <div className="subtle">
-              Question <b>{progress.step}</b> / {progress.total} • Answered <b>{progress.answered}</b>
-              {" "}• This question: <b>{currentPoints}</b>/{pack.options.length}
+              Question <b>{progress.step}</b> / {progress.total} • Answered <b>{progress.answered}</b> • This question:{" "}
+              <b>{currentPoints}</b>/{pack.options.length}
             </div>
           </div>
 
@@ -416,14 +410,12 @@ export default function App() {
           </div>
         </header>
 
-        {/* Progress bar */}
         <div className="progress-wrap" aria-label="Progress">
           <div className="progress-track">
             <div className="progress-fill" style={{ width: `${progress.pct}%` }} />
           </div>
         </div>
 
-        {/* Settings card */}
         <section className="card settings">
           <div className="settings-row">
             <label className="toggle">
@@ -452,11 +444,7 @@ export default function App() {
             </label>
 
             <label className="toggle">
-              <input
-                type="checkbox"
-                checked={showComments}
-                onChange={(e) => setShowComments(e.target.checked)}
-              />
+              <input type="checkbox" checked={showComments} onChange={(e) => setShowComments(e.target.checked)} />
               <span>Show comments</span>
             </label>
           </div>
@@ -465,7 +453,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* Question */}
         <section className="card quiz">
           <div className="question-meta">
             {(current.chapter || current.source) ? (
@@ -479,10 +466,8 @@ export default function App() {
             {index + 1}) {current.question}
           </h2>
 
-          {/* Question image (optional) */}
           <Img src={current.image} alt={`Question ${current.id}`} variant="question" />
 
-          {/* Optional Comment box */}
           {showComments && current.comment && (
             <div
               style={{
@@ -534,11 +519,8 @@ export default function App() {
                       <div style={{ marginBottom: image ? 10 : 0 }}>
                         <span className="optkey">{key}.</span> {text}
                       </div>
-
-                      {/* Answer image (optional) */}
                       <Img src={image} alt={`Option ${key}`} variant="option" />
                     </div>
-
                     <div className="option-badge">{badge}</div>
                   </div>
                 </button>
@@ -571,7 +553,6 @@ export default function App() {
           </div>
         </section>
 
-        {/* Review */}
         {submitted && (
           <section className="card review">
             <h3 className="title">Review</h3>
@@ -590,7 +571,6 @@ export default function App() {
                   correctArr: packQ?.correct ?? []
                 });
 
-                // Optional: keep old ok/bad styling based on exact match
                 const ok = same(sel, corr);
 
                 return (
