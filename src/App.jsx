@@ -88,7 +88,7 @@ function calcQuestionScoreJudgement({ optionKeys, judgementMap, correctArr }) {
     const j = judgementMap?.[k] || ""; // "C" | "W" | ""
 
     if (j === "") {
-      wrongCount += 1; // undecided counts as wrong
+      wrongCount += 1;
       continue;
     }
 
@@ -149,11 +149,15 @@ export default function App() {
   const [index, setIndex] = useState(0);
 
   /**
-   * NEW: answers[qid] is an object:
+   * answers[qid] is an object:
    * { A:"C"|"W"|"" , B:"C"|"W"|"" , ... }
    */
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
+
+  // Retry mode: only wrong questions
+  const [retryMode, setRetryMode] = useState(false);
+  const [retryQuiz, setRetryQuiz] = useState([]);
 
   // Detect chapters
   const chapters = useMemo(() => {
@@ -182,12 +186,27 @@ export default function App() {
     return map;
   }, [quiz, shuffleOptions]);
 
-  const current = quiz[index];
+  const activeQuiz = retryMode ? retryQuiz : quiz;
+  const current = activeQuiz[index];
+
+  function isQuestionWrong(q) {
+    const pack = optionPack[q.id];
+    if (!pack) return true;
+    const keys = pack.options.map((o) => o.key);
+
+    const res = calcQuestionScoreJudgement({
+      optionKeys: keys,
+      judgementMap: answers[q.id] || {},
+      correctArr: pack.correct
+    });
+
+    return res.points < keys.length; // not perfect => wrong
+  }
 
   // Progress: "answered" = all options judged (no "")
   const progress = useMemo(() => {
-    const total = quiz.length || 0;
-    const answered = quiz.reduce((acc, q) => {
+    const total = activeQuiz.length || 0;
+    const answered = activeQuiz.reduce((acc, q) => {
       const pack = optionPack[q.id];
       if (!pack) return acc;
       const keys = pack.options.map((o) => o.key);
@@ -199,9 +218,9 @@ export default function App() {
     const step = total ? index + 1 : 0;
     const pct = total ? (step / total) * 100 : 0;
     return { total, answered, step, pct };
-  }, [quiz, optionPack, answers, index]);
+  }, [activeQuiz, optionPack, answers, index]);
 
-  // Total score after submit
+  // Total score after submit (FULL quiz only)
   const score = useMemo(() => {
     if (!submitted) return null;
 
@@ -242,16 +261,44 @@ export default function App() {
   }
 
   function goNext() {
-    setIndex((i) => Math.min(quiz.length - 1, i + 1));
+    setIndex((i) => Math.min(activeQuiz.length - 1, i + 1));
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function backToChapters(keepSelection = true) {
     setQuizStarted(false);
     setSubmitted(false);
+    setRetryMode(false);
+    setRetryQuiz([]);
     setAnswers({});
     setIndex(0);
     if (!keepSelection) setSelectedChapters([]);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function startRetryWrong() {
+    const wrong = quiz.filter((q) => isQuestionWrong(q));
+    if (!wrong.length) return;
+
+    // clear judgements for wrong questions only (fresh attempt)
+    setAnswers((prev) => {
+      const next = { ...prev };
+      for (const q of wrong) next[q.id] = {};
+      return next;
+    });
+
+    setRetryMode(true);
+    setRetryQuiz(wrong);
+    setSubmitted(false);
+    setIndex(0);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  function exitRetryToReview() {
+    setRetryMode(false);
+    setRetryQuiz([]);
+    setSubmitted(true);
+    setIndex(0);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -389,7 +436,7 @@ export default function App() {
   const truthCorrectSet = new Set(pack.correct);
 
   const isFirst = index === 0;
-  const isLast = index === quiz.length - 1;
+  const isLast = index === activeQuiz.length - 1;
 
   const { points: currentPoints, wrongCount } = calcQuestionScoreJudgement({
     optionKeys: keys,
@@ -406,18 +453,37 @@ export default function App() {
           <div className="topbar-left">
             <div className="appname">FDV Quiz PoC</div>
             <div className="subtle">
-              Question <b>{progress.step}</b> / {progress.total} • Fully decided <b>{progress.answered}</b> • This
-              question: <b>{currentPoints}</b>/{keys.length} (wrong: {wrongCount})
+              {retryMode ? (
+                <>
+                  Retry wrong • Question <b>{progress.step}</b> / {progress.total}
+                </>
+              ) : (
+                <>
+                  Question <b>{progress.step}</b> / {progress.total}
+                </>
+              )}
+              {" "}• Fully decided <b>{progress.answered}</b> • This question:{" "}
+              <b>{currentPoints}</b>/{keys.length} (wrong: {wrongCount})
             </div>
           </div>
 
           <div className="topbar-right" style={{ gap: 8, flexDirection: "row" }}>
+            {retryMode && (
+              <button className="btn" onClick={exitRetryToReview}>
+                Exit retry
+              </button>
+            )}
+
             <button className="btn" onClick={() => backToChapters(true)}>
               Chapters
             </button>
 
             {!submitted ? (
-              <button className="btn btn-primary" onClick={() => setSubmitted(true)} disabled={progress.answered === 0}>
+              <button
+                className="btn btn-primary"
+                onClick={() => setSubmitted(true)}
+                disabled={progress.answered === 0}
+              >
                 Submit
               </button>
             ) : (
@@ -511,7 +577,6 @@ export default function App() {
               const j = judgementMap[key] || ""; // "C"|"W"|""
               const truthIsCorrect = truthCorrectSet.has(key);
 
-              // feedback badge + state class
               let badge = "";
               let stateClass = "";
 
@@ -593,13 +658,23 @@ export default function App() {
           </div>
         </section>
 
-        {/* Review */}
-        {submitted && (
+        {/* Review (full quiz) */}
+        {submitted && !retryMode && (
           <section className="card review">
             <h3 className="title">Review</h3>
             <div className="tiny muted">Tap an item to jump to that question.</div>
 
-            <div className="review-list">
+            <div style={{ marginTop: 10, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button
+                className="btn btn-primary"
+                onClick={startRetryWrong}
+                disabled={quiz.every((q) => !isQuestionWrong(q))}
+              >
+                Retry wrong questions
+              </button>
+            </div>
+
+            <div className="review-list" style={{ marginTop: 12 }}>
               {quiz.map((q, i) => {
                 const packQ = optionPack[q.id];
                 const keysQ = packQ.options.map((o) => o.key);
@@ -641,6 +716,59 @@ export default function App() {
               </button>
               <button className="btn btn-primary" onClick={() => backToChapters(false)}>
                 Change chapters
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Review (retry mode) */}
+        {submitted && retryMode && (
+          <section className="card review">
+            <h3 className="title">Retry results</h3>
+            <div className="tiny muted">You were retrying only the previously wrong questions.</div>
+
+            <div className="review-list" style={{ marginTop: 12 }}>
+              {retryQuiz.map((q, i) => {
+                const packQ = optionPack[q.id];
+                const keysQ = packQ.options.map((o) => o.key);
+
+                const res = calcQuestionScoreJudgement({
+                  optionKeys: keysQ,
+                  judgementMap: answers[q.id] || {},
+                  correctArr: packQ.correct
+                });
+
+                const perfect = res.points === keysQ.length;
+
+                return (
+                  <button
+                    key={q.id}
+                    className={`review-item ${perfect ? "ok" : "bad"}`}
+                    onClick={() => {
+                      setIndex(i);
+                      window.scrollTo({ top: 0, behavior: "smooth" });
+                    }}
+                  >
+                    <div className="review-left">
+                      <div className="review-q">
+                        {i + 1}) {q.question}
+                      </div>
+                      <div className="tiny muted">
+                        Points: <b>{res.points}</b>/{keysQ.length} • Wrong: <b>{res.wrongCount}</b>
+                      </div>
+                    </div>
+                    <div className="review-right">{perfect ? "✅" : "❌"}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div style={{ marginTop: 12, display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <button className="btn btn-primary" onClick={exitRetryToReview}>
+                Back to full review
+              </button>
+              <button className="btn" onClick={() => backToChapters(true)}>
+                Back to chapters
               </button>
             </div>
           </section>
