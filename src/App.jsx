@@ -80,6 +80,9 @@ function calcQuestionScore({ totalOptions, selectedArr, correctArr }) {
   const selected = new Set(selectedArr || []);
   const correct = new Set(correctArr || []);
 
+  // ✅ NEW: unanswered question gives 0 points
+  if (selected.size === 0) return 0;
+
   let wrongSelected = 0;
   for (const a of selected) {
     if (!correct.has(a)) wrongSelected += 1;
