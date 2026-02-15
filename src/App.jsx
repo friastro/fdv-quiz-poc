@@ -31,22 +31,33 @@ function getChapterNumber(q) {
 }
 
 /**
- * Shuffle options + relabel A,B,C... according to new order,
- * and remap correct answers accordingly.
+ * Supports options in two formats:
+ * 1) options: { A: "text", B: "text" }
+ * 2) options: { A: {text:"...", image:"/img/a.png"}, ... }
+ *
+ * Shuffles options, RELABELS A,B,C... according to new order,
+ * and remaps correct answers accordingly.
  */
 function buildRelabeledOptions(question, shuffleOptions) {
   const letters = ["A", "B", "C", "D", "E", "F", "G"];
 
-  const entries = Object.entries(question.options).map(([origKey, text]) => ({
-    origKey: String(origKey).toUpperCase(),
-    text
-  }));
+  const entries = Object.entries(question.options).map(([origKey, val]) => {
+    const upKey = String(origKey).toUpperCase();
+    if (typeof val === "string") {
+      return { origKey: upKey, text: val, image: null };
+    }
+    // object form
+    const text = val?.text ?? "";
+    const image = val?.image ?? null;
+    return { origKey: upKey, text, image };
+  });
 
   const ordered = shuffleOptions ? shuffleArray(entries) : entries;
 
   const relabeled = ordered.map((it, idx) => ({
     key: letters[idx],
     text: it.text,
+    image: it.image,
     origKey: it.origKey
   }));
 
@@ -58,6 +69,39 @@ function buildRelabeledOptions(question, shuffleOptions) {
     .filter(Boolean);
 
   return { options: relabeled, correct: newCorrect };
+}
+
+function Img({ src, alt, variant }) {
+  if (!src) return null;
+  // variant controls sizing presets
+  const style =
+    variant === "option"
+      ? {
+          width: "100%",
+          maxHeight: 220,
+          objectFit: "contain",
+          borderRadius: 14,
+          border: "1px solid rgba(17,24,39,0.10)",
+          background: "#fff"
+        }
+      : {
+          width: "100%",
+          maxHeight: 320,
+          objectFit: "contain",
+          borderRadius: 18,
+          border: "1px solid rgba(17,24,39,0.10)",
+          background: "#fff",
+          marginTop: 12
+        };
+
+  return (
+    <img
+      src={src}
+      alt={alt || "image"}
+      loading="lazy"
+      style={style}
+    />
+  );
 }
 
 /* ---------------- App ---------------- */
@@ -98,8 +142,7 @@ export default function App() {
     return shuffleQuestions ? shuffleArray(base) : base;
   }, [quizStarted, filtered, shuffleQuestions]);
 
-  // Build per-question option order + remapped correct answers (option shuffle + relabel)
-  // Memo ensures: no reshuffle on every render.
+  // Per-question option order + remapped correct answers (option shuffle + relabel)
   const optionPack = useMemo(() => {
     const map = {};
     for (const q of quiz) map[q.id] = buildRelabeledOptions(q, shuffleOptions);
@@ -158,7 +201,7 @@ export default function App() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
-  /* ---------------- Start screen (chapter selection) ---------------- */
+  /* ---------------- Start screen ---------------- */
 
   if (!quizStarted) {
     const allSelected = chapters.length > 0 && selectedChapters.length === chapters.length;
@@ -368,7 +411,6 @@ export default function App() {
                 type="checkbox"
                 checked={showComments}
                 onChange={(e) => setShowComments(e.target.checked)}
-                disabled={submitted ? false : false}
               />
               <span>Show comments</span>
             </label>
@@ -392,7 +434,14 @@ export default function App() {
             {index + 1}) {current.question}
           </h2>
 
-          {/* Optional Comment box */}
+          {/* ✅ Question image (optional) */}
+          <Img
+            src={current.image}
+            alt={`Question ${current.id}`}
+            variant="question"
+          />
+
+          {/* ✅ Optional comment */}
           {showComments && current.comment && (
             <div
               style={{
@@ -409,7 +458,7 @@ export default function App() {
           )}
 
           <div className="options" style={{ marginTop: 12 }}>
-            {pack.options.map(({ key, text }) => {
+            {pack.options.map(({ key, text, image }) => {
               const isSel = selected.has(key);
               const isCorr = correctNow.includes(key);
 
@@ -428,13 +477,8 @@ export default function App() {
                   stateClass = "opt-wrong";
                 }
               } else if (practiceMode && isSel) {
-                if (isCorr) {
-                  badge = "✅";
-                  stateClass = "opt-correct";
-                } else {
-                  badge = "❌";
-                  stateClass = "opt-wrong";
-                }
+                badge = isCorr ? "✅" : "❌";
+                stateClass = isCorr ? "opt-correct" : "opt-wrong";
               }
 
               return (
@@ -445,9 +489,19 @@ export default function App() {
                   disabled={submitted}
                 >
                   <div className="option-row">
-                    <div className="option-text">
-                      <span className="optkey">{key}.</span> {text}
+                    <div className="option-text" style={{ width: "100%" }}>
+                      <div style={{ marginBottom: image ? 10 : 0 }}>
+                        <span className="optkey">{key}.</span> {text}
+                      </div>
+
+                      {/* ✅ Answer image (optional) */}
+                      <Img
+                        src={image}
+                        alt={`Option ${key}`}
+                        variant="option"
+                      />
                     </div>
+
                     <div className="option-badge">{badge}</div>
                   </div>
                 </button>
@@ -462,14 +516,14 @@ export default function App() {
           )}
 
           <div className="nav">
-            <button className="btn" onClick={goPrev} disabled={isFirst}>
+            <button className="btn" onClick={() => setIndex((i) => Math.max(0, i - 1))} disabled={isFirst}>
               ← Back
             </button>
 
             <div className="nav-center muted">{selected.size > 0 ? "Answered" : "Not answered yet"}</div>
 
             {!isLast ? (
-              <button className="btn btn-primary" onClick={goNext}>
+              <button className="btn btn-primary" onClick={() => setIndex((i) => Math.min(quiz.length - 1, i + 1))}>
                 Next →
               </button>
             ) : (

@@ -19,7 +19,7 @@ export const QUESTIONS = [
     chapterNumber: 2,
     chapter: "R300.2",
     source: "FDV: ►300.2 / 1.1.1",
-    question: "Der Lokführer kann ein Vorsignal nicht eindeutig erkennen...",
+    question: "Der Lokführer kann ein Vorsignal nicht eindeutig erkennen. Die Zugbeeinflussung meldet jedoch Fahrt Wie hat sich der Lokführer zu verhalten?",
     options: {
       A: "Er hat am Hauptsignal 'Halt' zu erwarten",
       B: "Er reduziert auf 30 km/h",
@@ -72,6 +72,23 @@ export const QUESTIONS = [
     },
     correct: ["C"],
     comment: "Fahrt auf Sicht bedeutet jederzeit vor einem Hindernis anhalten zu können."
-  }
+  },
+
+  {
+    id: "2.6",
+    chapterNumber: 2,
+    chapter: "R300.2",
+    source: "FDV: ►300.2 / 1.1.1",
+    question: "Du triffst bei der Blockstelle Foral auf folgendes Signal (alle Linsen dunkel). Welche Aussagen treffen zu?",
+    image: "/img/q2_2.png",
+    options: {
+      A: "Ich betrachte dieses Signal als Warnung und erwarte Halt beim Einfahrsignal",
+      B: "Ich betrachte dieses Signal als Halt und halte vor diesem Signal an",
+      C: "Wenn das Vorsignal Fahrt signalisiert hat darf an diesem Signal vorbei gefahren werden",
+      D: "Nur wenn das Vorsignal Warnung signalisiert hat muss ich vor diesem Signal anhalten"
+    },
+    correct: ["B"],
+    comment: "Mit diesem Aufsatz gilt dieses Signal als Hauptsignal (in der Grundstellung zeigt es Halt). FDV: ►300.2 / 5.1.5"
+  },
   
 ];
