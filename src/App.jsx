@@ -23,7 +23,6 @@ function same(a, b) {
 }
 
 function getChapterNumber(q) {
-  // ids like "1.16" => chapter 1
   const id = String(q?.id ?? "").trim();
   const m = id.match(/^(\d+)\./);
   if (m) return Number(m[1]);
@@ -83,7 +82,7 @@ export default function App() {
   const [answers, setAnswers] = useState({});
   const [submitted, setSubmitted] = useState(false);
 
-  // Detect chapters
+  // Detect chapters from data
   const chapters = useMemo(() => {
     const nums = QUESTIONS.map(getChapterNumber).filter((x) => Number.isFinite(x));
     return [...new Set(nums)].sort((a, b) => a - b);
@@ -103,8 +102,8 @@ export default function App() {
     return shuffleQuestions ? shuffleArray(base) : base;
   }, [quizStarted, filtered, shuffleQuestions]);
 
-  // Build per-question option order + remapped correct answers (option shuffle + relabel)
-  // IMPORTANT: this memo ensures options don't reshuffle on every render.
+  // Per-question option order + remapped correct answers (option shuffle + relabel)
+  // This memo ensures options don't reshuffle on every render.
   const optionPack = useMemo(() => {
     const map = {};
     for (const q of quiz) map[q.id] = buildRelabeledOptions(q, shuffleOptions);
@@ -115,7 +114,10 @@ export default function App() {
 
   const progress = useMemo(() => {
     const total = quiz.length || 0;
-    const answered = quiz.reduce((acc, q) => acc + ((answers[q.id] || []).length > 0 ? 1 : 0), 0);
+    const answered = quiz.reduce(
+      (acc, q) => acc + ((answers[q.id] || []).length > 0 ? 1 : 0),
+      0
+    );
     const step = total ? index + 1 : 0;
     const pct = total ? (step / total) * 100 : 0;
     return { total, answered, step, pct };
@@ -128,7 +130,11 @@ export default function App() {
       const corr = optionPack[q.id]?.correct ?? [];
       if (same(answers[q.id], corr)) ok += 1;
     }
-    return { ok, total: quiz.length, pct: quiz.length ? (ok / quiz.length) * 100 : 0 };
+    return {
+      ok,
+      total: quiz.length,
+      pct: quiz.length ? (ok / quiz.length) * 100 : 0
+    };
   }, [submitted, answers, quiz, optionPack]);
 
   function toggleAnswer(qid, opt) {
@@ -371,7 +377,23 @@ export default function App() {
             {index + 1}) {current.question}
           </h2>
 
-          <div className="options">
+          {/* Optional Comment box */}
+          {current.comment && (
+            <div
+              style={{
+                marginTop: 10,
+                padding: 10,
+                borderRadius: 14,
+                background: "rgba(59, 130, 246, 0.10)",
+                border: "1px solid rgba(59, 130, 246, 0.35)",
+                fontSize: 14
+              }}
+            >
+              💬 <b>Comment:</b> {current.comment}
+            </div>
+          )}
+
+          <div className="options" style={{ marginTop: 12 }}>
             {pack.options.map(({ key, text }) => {
               const isSel = selected.has(key);
               const isCorr = correctNow.includes(key);
@@ -470,7 +492,8 @@ export default function App() {
                         {i + 1}) {q.question}
                       </div>
                       <div className="tiny muted">
-                        Your: <b>{sel.length ? sel.join(", ") : "—"}</b> • Correct: <b>{corr.join(", ")}</b>
+                        Your: <b>{sel.length ? sel.join(", ") : "—"}</b> • Correct:{" "}
+                        <b>{corr.join(", ")}</b>
                       </div>
                     </div>
                     <div className="review-right">{ok ? "✅" : "❌"}</div>

@@ -27,5 +27,51 @@ export const QUESTIONS = [
       D: "Er erkundet sich beim FDL"
     },
     correct: ["A"]
+  },
+
+  {
+    id: "2.3",
+    chapter: "R300.2",
+    source: "FDV: ►300.2 / 1.2.2",
+    question: "Was bedeutet das Signalbild 'Warnung' beim Vorsignal?",
+    options: {
+      A: "Das Hauptsignal zeigt Halt",
+      B: "Das Hauptsignal kann Halt zeigen",
+      C: "Das Hauptsignal zeigt Fahrt",
+      D: "Das Hauptsignal ist ungültig"
+    },
+    correct: ["B"],
+    comment: "Bei 'Warnung' ist mit Halt am Hauptsignal zu rechnen."
+  },
+  
+  {
+    id: "2.4",
+    chapter: "R300.2",
+    source: "FDV: ►300.2 / 1.3.1",
+    question: "Wann darf ein Halt zeigendes Hauptsignal überfahren werden?",
+    options: {
+      A: "Bei Zustimmung des Fahrdienstleiters",
+      B: "Wenn kein Gegenzug sichtbar ist",
+      C: "Bei schriftlichem Befehl",
+      D: "Bei Ausfall des Signals"
+    },
+    correct: ["A", "C"],
+    comment: "Ein Halt zeigendes Signal darf nur mit entsprechender Erlaubnis überfahren werden."
+  },
+  
+  {
+    id: "2.5",
+    chapter: "R300.2",
+    source: "FDV: ►300.2 / 2.1.3",
+    question: "Welche Geschwindigkeit gilt bei Fahrt auf Sicht?",
+    options: {
+      A: "Maximal 40 km/h",
+      B: "Maximal 30 km/h",
+      C: "So, dass rechtzeitig angehalten werden kann",
+      D: "Maximal 20 km/h"
+    },
+    correct: ["C"],
+    comment: "Fahrt auf Sicht bedeutet jederzeit vor einem Hindernis anhalten zu können."
   }
+  
 ];
